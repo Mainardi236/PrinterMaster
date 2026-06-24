@@ -1,9 +1,11 @@
 import customtkinter as ctk
+import win32api
 import win32print
 import win32service
 import win32serviceutil
 from tkinter import filedialog
 import os
+import shutil
 import subprocess
 
 def restart():
@@ -70,30 +72,57 @@ def show_printers():
     info_label.configure(text=list_printers())
 
 
+def get_print_queue():
+    try:
+        printer_name = win32print.GetDefaultPrinter()
+        handle = win32print.OpenPrinter(printer_name)
+        jobs = win32print.EnumJobs(handle, 0, -1, 1)
+        win32print.ClosePrinter(handle)
+
+        if not jobs:
+            return f"Fila de impressão vazia para: {printer_name}"
+
+        lines = [f"Fila de impressão ({printer_name}):"]
+        for job in jobs:
+            job_id = _printer_info_value(job, "JobId", 0)
+            document = _printer_info_value(job, "pDocument", 4)
+            status = _printer_info_value(job, "Status", 6)
+            lines.append(f"ID {job_id} - {document} - Status {status}")
+        return "\n".join(lines)
+    except Exception as error:
+        return f"Erro ao obter fila de impressão: {error}"
+
+
+def show_print_queue():
+    info_label.configure(text=get_print_queue())
+
+
+def open_control_printers():
+    try:
+        subprocess.Popen(["control", "printers"])
+        info_label.configure(text="Painel de impressão aberto.")
+    except Exception as error:
+        info_label.configure(text=f"Erro ao abrir Control Printers: {error}")
+
+
 def print_folder_files():
     global selected_folder
     folder = selected_folder or filedialog.askdirectory()
     if not folder:
         return
 
-    # Get the default printer automatically
-    try:
-        PRINTER_NAME = win32print.GetDefaultPrinter()
-    except Exception:
-        PRINTER_NAME = "NOME_DA_SUA_IMPRESSORA"
-
-    # Build PowerShell script to print all PDFs in the folder using SumatraPDF
-    ps_script = (
-        "$folder = '{folder}';"
-        "$printer = '{printer}';"
-        "Get-ChildItem $folder -Filter *.pdf | ForEach-Object {"
-        " & 'C:\\Users\\leao-\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe' -print-to $printer $_.FullName;"
-        " Start-Sleep -Milliseconds 800 }"
-    ).format(folder=folder.replace("'", "''"), printer=PRINTER_NAME.replace("'", "''"))
+    pdf_files = [
+        os.path.join(folder, f)
+        for f in os.listdir(folder)
+        if f.lower().endswith(".pdf")
+    ]
+    if not pdf_files:
+        info_label.configure(text=f"Nenhum PDF encontrado em:\n{folder}")
+        return
 
     try:
-        # Execute PowerShell script
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], check=True)
+        for pdf_file in pdf_files:
+            win32api.ShellExecute(0, "print", os.path.abspath(pdf_file), "", ".", 0)
         info_label.configure(text=f"Enviados para impressão todos os PDFs de:\n{folder}")
     except Exception as error:
         info_label.configure(text=f"Erro ao imprimir arquivos da pasta: {error}")
@@ -118,6 +147,18 @@ btn_list = ctk.CTkButton(
     app,
     text="Listar impressoras",
     command=show_printers
+)
+
+btn_print_queue = ctk.CTkButton(
+    app,
+    text="Fila de impressão",
+    command=show_print_queue
+)
+
+btn_control_printers = ctk.CTkButton(
+    app,
+    text="Abrir painel de impressoras",
+    command=open_control_printers
 )
 
 def select_folder():
@@ -152,6 +193,8 @@ btn_refresh.pack(padx=20, pady=10, fill="x")
 btn_list.pack(padx=20, pady=10, fill="x")
 btn_select_folder.pack(padx=20, pady=10, fill="x")
 btn_print_folder.pack(padx=20, pady=10, fill="x")
+btn_print_queue.pack(padx=20, pady=10, fill="x")
+btn_control_printers.pack(padx=20, pady=10, fill="x")
 info_label.pack(padx=20, pady=(10, 20), fill="x")
 
 folder_label = ctk.CTkLabel(
