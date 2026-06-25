@@ -1,5 +1,4 @@
 # Printer_Master - Beta Version #
----
 🇧🇷 Versão beta de um software para manutenção e automação de impressora.
 ---
 🇺🇸 Beta version of a software for automation and manutention for printers.
